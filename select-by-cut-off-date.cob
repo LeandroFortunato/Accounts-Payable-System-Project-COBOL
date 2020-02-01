@@ -1,0 +1,107 @@
+IDENTIFICATION DIVISION.
+PROGRAM-ID. select-by-cut-off-date.
+ENVIRONMENT DIVISION.
+   INPUT-OUTPUT SECTION.
+      FILE-CONTROL.
+
+      COPY "SLVOUCH.CBL".
+
+DATA DIVISION.
+   FILE SECTION.
+
+   COPY "FDVOUCH.CBL".
+
+   WORKING-STORAGE SECTION.
+
+     COPY "wscase01.cbl".
+     COPY "wsdate.cbl".
+
+      01 W-VALID-ANSWER                       PIC X.
+         88 VALID-ANSWER                      VALUE "Y","N".
+         88 SELE-CUT-OFF-DATE-IS-CONFIRMED    VALUE "Y".   
+
+      01 W-END-OF-FILE  		                PIC X.
+         88 END-OF-FILE     	                VALUE "Y".
+
+      77 FORMATTED-DATE-MM-DD-CCYY            PIC 99/99/9999.
+      77 DUMMY-DATE-MM-DD-CCYY-12             PIC 9(12).
+      77 DUMMY-DATE-MM-DD-CCYY-8              PIC 9(8).
+      77 DUMMY                                PIC X.
+      77 MSG-CONFIRMATION                     PIC X(79).
+      77 TOTAL-RECORDS-CHANGED                PIC 9(7).
+      77 FORMAT-TOTAL-RECORDS-CHANGED         PIC ZZZZZZ9.
+*>_________________________________________________________________________
+   
+PROCEDURE DIVISION.
+
+   PERFORM CLEAR-SCREEN.
+
+   MOVE "INFORM CUT-OFF DATE FOR THE VOUCHERS TO PAY (MMDDYYYY) - <ENTER> FOR MENU"
+     TO GDTV-DATE-HEADING.
+
+   MOVE 1900 TO GDTV-FIRST-YEAR-VALID. 
+   MOVE 2100 TO GDTV-LAST-YEAR-VALID.   
+   MOVE "Y"  TO GDTV-ACCEPT-EMPTY-DATE.
+
+   PERFORM GET-VALI-DATE-RETURN-GDTV-DATE.
+
+   IF GDTV-DATE NOT EQUAL ZEROS
+
+      PERFORM CLEAR-SCREEN
+
+      COMPUTE DUMMY-DATE-MM-DD-CCYY-12 = GDTV-DATE * 10000.0001
+
+      MOVE DUMMY-DATE-MM-DD-CCYY-12 TO DUMMY-DATE-MM-DD-CCYY-8
+      MOVE DUMMY-DATE-MM-DD-CCYY-8  TO FORMATTED-DATE-MM-DD-CCYY
+      
+      STRING "DO YOU WANT ME TO SELECT ALL VOUCHERS UNTIL "
+             FORMATTED-DATE-MM-DD-CCYY 
+             " FOR PAYMENT ? (Y/N)"
+        INTO MSG-CONFIRMATION
+      END-STRING
+             
+      PERFORM CONFIRM-EXECUTION *> force first loop
+      PERFORM CONFIRM-EXECUTION UNTIL VALID-ANSWER
+
+      IF SELE-CUT-OFF-DATE-IS-CONFIRMED  
+         OPEN I-O VOUCHER-FILE
+         MOVE ZEROS TO TOTAL-RECORDS-CHANGED
+         PERFORM READ-VOUCHER-NEXT-RECORD
+         PERFORM SEL-IF-CUT-OFF-DATE-READ-NEXT UNTIL END-OF-FILE
+         
+         MOVE TOTAL-RECORDS-CHANGED TO FORMAT-TOTAL-RECORDS-CHANGED
+         PERFORM CLEAR-SCREEN
+         DISPLAY FORMAT-TOTAL-RECORDS-CHANGED 
+                 " VOUCHER(S) SELECTED FOR PAYMENT ! <ENTER> TO CONTINUE"
+         ACCEPT DUMMY         
+
+         CLOSE VOUCHER-FILE.
+
+EXIT PROGRAM.
+STOP RUN.
+*>________________________________________________________________________
+
+SEL-IF-CUT-OFF-DATE-READ-NEXT.
+
+   IF VOUCHER-PAID-DATE EQUAL ZEROS *> Not paid yet
+                AND 
+      VOUCHER-DUE NOT > GDTV-DATE *> last is cut-off date
+                AND
+      VOUCHER-SELECTED NOT EQUAL "Y" *> Not selected yet
+
+         MOVE "Y" TO VOUCHER-SELECTED
+         ADD 1 TO TOTAL-RECORDS-CHANGED
+         REWRITE VOUCHER-RECORD
+            INVALID KEY
+               SUBTRACT 1 FROM TOTAL-RECORDS-CHANGED
+               DISPLAY "*** ERROR RE-WRITING THE VOUCHER ! *** <ENTER> TO CONTINUE"
+               ACCEPT DUMMY.
+   
+   PERFORM READ-VOUCHER-NEXT-RECORD.   
+*>_________________________________________________________________________
+
+COPY "PLGENERAL.CBL".
+COPY "PLDATE.CBL".
+COPY "READ-VOUCHER-NEXT-RECORD.CBL".
+*>_________________________________________________________________________
+
